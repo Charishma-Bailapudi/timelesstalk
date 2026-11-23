@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
 import { getPersonaById } from "@/data/personas";
+import { google } from "@ai-sdk/google";
+import { convertToModelMessages, streamText } from "ai";
+import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -20,9 +22,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const { personaId, message } = body as {
+  const { personaId, messages } = body as {
     personaId?: unknown;
-    message?: unknown;
+    messages?: unknown;
   };
 
   if (typeof personaId !== "string") {
@@ -40,15 +42,26 @@ export async function POST(request: Request) {
     );
   }
 
-  if (typeof message !== "string" || message.trim().length === 0) {
+  if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json(
-      { error: "Message must not be empty." },
+      { error: "Messages must contain at least one message." },
       { status: 400 },
     );
   }
 
-  const trimmedMessage = message.trim();
-  return NextResponse.json({
-    reply: `[${persona.name} Echo]: ${trimmedMessage}`,
-  });
+  try {
+    const modelMessages = await convertToModelMessages(messages);
+    const result = streamText({
+      model: google("gemini-2.5-flash"),
+      system: persona.systemPrompt,
+      messages: modelMessages,
+    });
+
+    return result.toUIMessageStreamResponse();
+  } catch {
+    return NextResponse.json(
+      { error: "The AI service could not process the request." },
+      { status: 500 },
+    );
+  }
 }
