@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { google } from "@ai-sdk/google";
 import { Pinecone } from "@pinecone-database/pinecone";
-import { embedMany } from "ai";
+import { embedMany, generateText } from "ai";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { saveCustomPersona } from "@/lib/persona-store";
@@ -34,35 +34,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const {
-    name,
-    title,
-    corePrinciples,
-    speakingStyle,
-    knowledgeText,
-  } = body as {
+  const { name, description, knowledgeText } = body as {
     name?: unknown;
-    title?: unknown;
-    corePrinciples?: unknown;
-    speakingStyle?: unknown;
+    description?: unknown;
     knowledgeText?: unknown;
   };
 
   if (
     typeof name !== "string" ||
     !name.trim() ||
-    typeof title !== "string" ||
-    !title.trim() ||
-    typeof corePrinciples !== "string" ||
-    !corePrinciples.trim() ||
-    typeof speakingStyle !== "string" ||
-    !speakingStyle.trim()
+    typeof description !== "string" ||
+    !description.trim()
   ) {
     return NextResponse.json(
-      {
-        error:
-          "Name, title, core principles, and speaking style are required.",
-      },
+      { error: "Name and description are required." },
       { status: 400 },
     );
   }
@@ -75,24 +60,14 @@ export async function POST(request: Request) {
     .slice(0, 40);
   const id = `${slug || "persona"}-${randomUUID().slice(0, 8)}`;
 
-  const systemPrompt = `You are ${name.trim()}, ${title.trim()}.
-
-Core principles:
-${corePrinciples.trim()}
-
-Speaking style:
-${speakingStyle.trim()}
-
-Respond consistently as this persona. Apply the core principles and speaking style
-naturally, while grounding claims in the retrieved knowledge passages when relevant.
-Do not claim that you searched a database or received passages.`;
+  const generated = await generatePersonaDetails(name.trim(), description.trim());
 
   const persona: Persona = {
     id,
     name: name.trim(),
-    title: title.trim(),
-    tagline: `${name.trim()} — ${title.trim()}`,
-    systemPrompt,
+    title: generated.title,
+    tagline: generated.tagline,
+    systemPrompt: generated.systemPrompt,
     createdBy: userId,
     isCustom: true,
   };
@@ -153,6 +128,61 @@ Do not claim that you searched a database or received passages.`;
   }
 
   return NextResponse.json({ persona }, { status: 201 });
+}
+
+async function generatePersonaDetails(
+  name: string,
+  description: string,
+): Promise<{ title: string; tagline: string; systemPrompt: string }> {
+  const fallback = {
+    title: description.split(/[.!?]/, 1)[0].trim().slice(0, 100) || name,
+    tagline: description,
+    systemPrompt: `You are ${name}. ${description}
+
+Stay consistent with this identity and description. Respond naturally and
+thoughtfully, and use relevant retrieved knowledge passages when available.
+Do not mention retrieval or claim access to information that was not provided.`,
+  };
+
+  try {
+    const { text } = await generateText({
+      model: google("gemini-2.5-flash"),
+      prompt: `Create persona instructions based on this information.
+Return only a JSON object with string fields "title", "tagline", and "systemPrompt".
+
+Name: ${name}
+Description: ${description}`,
+    });
+
+    const parsed = JSON.parse(text) as {
+      title?: unknown;
+      tagline?: unknown;
+      systemPrompt?: unknown;
+    };
+
+    if (
+      typeof parsed.title !== "string" ||
+      typeof parsed.tagline !== "string" ||
+      typeof parsed.systemPrompt !== "string" ||
+      !parsed.title.trim() ||
+      !parsed.tagline.trim() ||
+      !parsed.systemPrompt.trim()
+    ) {
+      return fallback;
+    }
+
+    return {
+      title: parsed.title.trim(),
+      tagline: parsed.tagline.trim(),
+      systemPrompt: parsed.systemPrompt.trim(),
+    };
+  } catch (error) {
+    console.warn(
+      "[Persona Creation] Gemini generation failed; using a safe fallback.",
+      error,
+    );
+    return fallback;
+  }
 }
 
 function chunkKnowledgeText(text: string): string[] {

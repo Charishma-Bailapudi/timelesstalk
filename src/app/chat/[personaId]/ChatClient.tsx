@@ -3,9 +3,16 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Persona } from "@/data/personas";
 import { ChatMessage } from "@/lib/redis";
+import { speakText, stopSpeaking } from "@/lib/voice";
 
 export default function ChatClient({
   persona,
@@ -15,6 +22,11 @@ export default function ChatClient({
   personaId: string;
 }) {
   const [input, setInput] = useState("");
+  const [autoSpeak, setAutoSpeak] = useState(false);
+  const [voiceState, setVoiceState] = useState<{
+    messageId: string;
+    state: "loading" | "playing";
+  } | null>(null);
 
   const { messages, sendMessage, status, error, clearError, setMessages } = useChat({
     transport: new DefaultChatTransport({
@@ -22,6 +34,24 @@ export default function ChatClient({
       body: { personaId },
     }),
   });
+  const previousStatus = useRef(status);
+  const lastAutoSpokenMessage = useRef<string | null>(null);
+
+  const startSpeaking = useCallback(
+    async (messageId: string, text: string) => {
+      stopSpeaking();
+      setVoiceState({ messageId, state: "loading" });
+      await speakText(
+        text,
+        personaId,
+        () => setVoiceState((current) =>
+          current?.messageId === messageId ? null : current,
+        ),
+        () => setVoiceState({ messageId, state: "playing" }),
+      );
+    },
+    [personaId],
+  );
 
   useEffect(() => {
     let active = true;
@@ -52,11 +82,43 @@ export default function ChatClient({
     };
   }, [personaId, setMessages]);
 
+  useEffect(() => {
+    const finishedGeneration =
+      status === "ready" &&
+      (previousStatus.current === "submitted" ||
+        previousStatus.current === "streaming");
+
+    if (autoSpeak && finishedGeneration) {
+      const assistantMessage = [...messages]
+        .reverse()
+        .find((message) => message.role === "assistant");
+      const text = assistantMessage?.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+
+      if (
+        assistantMessage &&
+        text &&
+        lastAutoSpokenMessage.current !== assistantMessage.id
+      ) {
+        lastAutoSpokenMessage.current = assistantMessage.id;
+        void startSpeaking(assistantMessage.id, text);
+      }
+    }
+
+    previousStatus.current = status;
+  }, [autoSpeak, messages, startSpeaking, status]);
+
+  useEffect(() => () => stopSpeaking(), []);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const message = input.trim();
     if (!message || status === "submitted" || status === "streaming") return;
 
+    stopSpeaking();
+    setVoiceState(null);
     clearError();
     setInput("");
     await sendMessage({ text: message });
@@ -78,6 +140,8 @@ export default function ChatClient({
         `/api/chat/history?personaId=${encodeURIComponent(personaId)}`,
         { method: "DELETE" },
       );
+      stopSpeaking();
+      setVoiceState(null);
       setMessages([]);
     } catch (error) {
       console.warn("[Chat] Could not clear session history.", error);
@@ -110,6 +174,18 @@ export default function ChatClient({
           >
             Clear Chat
           </button>
+          <button
+            type="button"
+            aria-pressed={autoSpeak}
+            onClick={() => setAutoSpeak((enabled) => !enabled)}
+            className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition sm:px-4 ${
+              autoSpeak
+                ? "border-amber-300/40 text-amber-200"
+                : "border-white/10 text-stone-500 hover:text-stone-300"
+            }`}
+          >
+            Auto-Speak {autoSpeak ? "On" : "Off"}
+          </button>
         </div>
       </header>
 
@@ -130,18 +206,52 @@ export default function ChatClient({
                   {persona.name.charAt(0)}
                 </div>
               )}
-              <p
-                className={`max-w-[78%] whitespace-pre-wrap rounded-2xl px-3 py-3 leading-7 sm:max-w-[70%] sm:px-4 ${
-                  message.role === "user"
-                    ? "rounded-br-md bg-amber-300 text-stone-950"
-                    : "rounded-bl-md border border-white/10 bg-white/[0.06] text-stone-200"
-                }`}
-              >
-                {message.parts
-                  .filter((part) => part.type === "text")
-                  .map((part) => part.text)
-                  .join("")}
-              </p>
+              <div className="max-w-[85%] sm:max-w-[75%]">
+                <p
+                  className={`whitespace-pre-wrap rounded-2xl px-3 py-3 leading-7 sm:px-4 ${
+                    message.role === "user"
+                      ? "rounded-br-md bg-amber-300 text-stone-950"
+                      : "rounded-bl-md border border-white/10 bg-white/[0.06] text-stone-200"
+                  }`}
+                >
+                  {message.parts
+                    .filter((part) => part.type === "text")
+                    .map((part) => part.text)
+                    .join("")}
+                </p>
+                {message.role === "assistant" && (
+                  <button
+                    type="button"
+                    disabled={
+                      voiceState?.messageId === message.id &&
+                      voiceState.state === "loading"
+                    }
+                    onClick={() => {
+                      if (
+                        voiceState?.messageId === message.id &&
+                        voiceState.state === "playing"
+                      ) {
+                        stopSpeaking();
+                        setVoiceState(null);
+                        return;
+                      }
+
+                      const text = message.parts
+                        .filter((part) => part.type === "text")
+                        .map((part) => part.text)
+                        .join("");
+                      void startSpeaking(message.id, text);
+                    }}
+                    className="mt-1 rounded-full px-2 py-1 text-xs text-stone-500 transition hover:text-amber-200 disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {voiceState?.messageId === message.id
+                      ? voiceState.state === "loading"
+                        ? "⏳ Loading..."
+                        : "⏹ Stop"
+                      : "🔊 Listen"}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
 

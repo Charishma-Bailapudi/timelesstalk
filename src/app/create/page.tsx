@@ -12,6 +12,7 @@ export default function CreatePersonaPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [showKnowledge, setShowKnowledge] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -21,9 +22,7 @@ export default function CreatePersonaPage() {
     const form = new FormData(event.currentTarget);
     const body = {
       name: form.get("name"),
-      title: form.get("title"),
-      corePrinciples: form.get("corePrinciples"),
-      speakingStyle: form.get("speakingStyle"),
+      description: form.get("description"),
       knowledgeText: form.get("knowledgeText"),
     };
 
@@ -98,53 +97,42 @@ export default function CreatePersonaPage() {
 
             <label className="block">
               <span className="mb-2 block text-sm font-medium text-stone-300">
-                Title / Era
-              </span>
-              <input
-                name="title"
-                required
-                placeholder="Co-founder of Apple"
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-stone-100 outline-none focus:border-amber-300/50"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-stone-300">
-                Core Principles
+                Who are they? (1–2 sentences)
               </span>
               <textarea
-                name="corePrinciples"
+                name="description"
                 required
-                rows={5}
-                placeholder="What beliefs guide this persona?"
+                rows={3}
+                placeholder="Co-founder of Apple. Direct, minimalist, and obsessed with product craft."
                 className="w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-stone-100 outline-none focus:border-amber-300/50"
               />
             </label>
 
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-stone-300">
-                Speaking Style
-              </span>
-              <textarea
-                name="speakingStyle"
-                required
-                rows={4}
-                placeholder="How does this persona speak?"
-                className="w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-stone-100 outline-none focus:border-amber-300/50"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-stone-300">
-                Knowledge Base Text (Optional)
-              </span>
-              <textarea
-                name="knowledgeText"
-                rows={8}
-                placeholder="Paste notes, quotes, or an article..."
-                className="w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-stone-100 outline-none focus:border-amber-300/50"
-              />
-            </label>
+            <div>
+              <button
+                type="button"
+                aria-expanded={showKnowledge}
+                onClick={() => setShowKnowledge((visible) => !visible)}
+                className="text-sm font-medium text-amber-200 transition hover:text-amber-100"
+              >
+                {showKnowledge
+                  ? "− Hide custom notes or quotes"
+                  : "+ Add custom notes or quotes (Optional)"}
+              </button>
+              {showKnowledge && (
+                <label className="mt-4 block">
+                  <span className="mb-2 block text-sm font-medium text-stone-300">
+                    Knowledge Base Text
+                  </span>
+                  <textarea
+                    name="knowledgeText"
+                    rows={8}
+                    placeholder="Paste notes, quotes, or an article..."
+                    className="w-full resize-y rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-stone-100 outline-none focus:border-amber-300/50"
+                  />
+                </label>
+              )}
+            </div>
 
             {error && (
               <p role="alert" className="text-sm text-red-300">
