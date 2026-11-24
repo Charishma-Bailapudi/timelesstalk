@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { getAllPersonas } from "@/lib/persona-store";
 
-export default function Home() {
-  const personas = getAllPersonas();
+export default async function Home() {
+  const personas = await getAllPersonas();
 
   return (
     <main className="min-h-screen px-5 py-12 sm:px-8 lg:px-12">
@@ -26,7 +26,17 @@ export default function Home() {
               href={`/chat/${persona.id}`}
               className="group rounded-2xl border border-white/10 bg-white/[0.04] p-6 transition hover:-translate-y-1 hover:border-amber-300/40 hover:bg-white/[0.07]"
             >
-              <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-full border border-amber-300/30 bg-amber-300/10 text-lg font-semibold text-amber-200">
+              <div
+                className={`mb-8 flex h-12 w-12 items-center justify-center rounded-full border text-lg font-semibold ${
+                  persona.id === "marcus"
+                    ? "border-amber-300/30 bg-amber-300/10 text-amber-200"
+                    : persona.id === "arjuna"
+                      ? "border-sky-300/30 bg-sky-300/10 text-sky-200"
+                      : persona.id === "bhishma"
+                        ? "border-violet-300/30 bg-violet-300/10 text-violet-200"
+                        : "border-emerald-300/30 bg-emerald-300/10 text-emerald-200"
+                }`}
+              >
                 {persona.name.charAt(0)}
               </div>
               <h2 className="text-xl font-semibold text-stone-100">{persona.name}</h2>

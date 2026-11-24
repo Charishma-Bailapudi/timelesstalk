@@ -1,54 +1,61 @@
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import { personas as defaultPersonas, Persona } from "@/data/personas";
+import { Redis } from "@upstash/redis";
 
-const customPersonasPath = path.join(
-  process.cwd(),
-  "data",
-  "custom-personas.json",
-);
+const CUSTOM_PERSONAS_KEY = "personas:custom";
 
-export function getAllPersonas(): Persona[] {
-  return [...defaultPersonas, ...readCustomPersonas()];
-}
-
-export function getPersonaById(id: string): Persona | undefined {
-  return getAllPersonas().find((persona) => persona.id === id);
-}
-
-export function saveCustomPersona(persona: Persona): void {
-  const directory = path.dirname(customPersonasPath);
-  if (!existsSync(directory)) {
-    mkdirSync(directory, { recursive: true });
+function getRedis(): Redis | null {
+  if (
+    !process.env.UPSTASH_REDIS_REST_URL ||
+    !process.env.UPSTASH_REDIS_REST_TOKEN
+  ) {
+    console.warn(
+      "[Persona Store] Upstash Redis environment variables are missing.",
+    );
+    return null;
   }
 
-  const customPersonas = readCustomPersonas();
-  const withoutDuplicate = customPersonas.filter(
-    (existing) => existing.id !== persona.id,
-  );
-
-  writeFileSync(
-    customPersonasPath,
-    JSON.stringify([...withoutDuplicate, persona], null, 2),
-    "utf8",
-  );
+  return Redis.fromEnv();
 }
 
-function readCustomPersonas(): Persona[] {
-  if (!existsSync(customPersonasPath)) {
+export async function getAllPersonas(): Promise<Persona[]> {
+  return [...defaultPersonas, ...(await readCustomPersonas())];
+}
+
+export async function getPersonaById(
+  id: string,
+): Promise<Persona | undefined> {
+  return (await getAllPersonas()).find((persona) => persona.id === id);
+}
+
+export async function saveCustomPersona(persona: Persona): Promise<void> {
+  const redis = getRedis();
+  if (!redis) {
+    return;
+  }
+
+  try {
+    const customPersonas = await readCustomPersonas();
+    const withoutDuplicate = customPersonas.filter(
+      (existing) => existing.id !== persona.id,
+    );
+    await redis.set(CUSTOM_PERSONAS_KEY, [
+      ...withoutDuplicate,
+      persona,
+    ]);
+  } catch (error) {
+    console.warn("[Persona Store] Could not save custom persona.", error);
+  }
+}
+
+async function readCustomPersonas(): Promise<Persona[]> {
+  const redis = getRedis();
+  if (!redis) {
     return [];
   }
 
   try {
-    const parsed = JSON.parse(
-      readFileSync(customPersonasPath, "utf8"),
-    ) as unknown;
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed.filter(isCustomPersona);
+    const parsed = await redis.get<unknown>(CUSTOM_PERSONAS_KEY);
+    return Array.isArray(parsed) ? parsed.filter(isCustomPersona) : [];
   } catch (error) {
     console.warn("[Persona Store] Could not read custom personas.", error);
     return [];

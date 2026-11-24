@@ -3,6 +3,12 @@ import { retrieveContext } from "@/lib/rag";
 import { google } from "@ai-sdk/google";
 import { convertToModelMessages, streamText } from "ai";
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import {
+  ChatMessage,
+  getChatHistory,
+  saveChatHistory,
+} from "@/lib/redis";
 
 function getLatestUserMessageText(messages: unknown[]): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -79,7 +85,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const persona = getPersonaById(personaId);
+  const persona = await getPersonaById(personaId);
   if (!persona) {
     return NextResponse.json(
       { error: "Unknown personaId." },
@@ -138,6 +144,36 @@ ${context}`;
       model: google("gemini-2.5-flash"),
       system: systemPrompt,
       messages: modelMessages,
+      onEnd: async ({ text }) => {
+        try {
+          const { userId } = await auth();
+          const ownerId = userId || "guest";
+          const latestUserMessage = getLatestUserMessageText(messages);
+          const sessionKey = `chat:${ownerId}:${personaId}`;
+          const existingMessages = await getChatHistory(sessionKey);
+
+          const updatedMessages: ChatMessage[] = [
+            ...existingMessages,
+            {
+              id: `user-${Date.now()}`,
+              role: "user",
+              parts: [{ type: "text", text: latestUserMessage }],
+            },
+            {
+              id: `assistant-${Date.now()}`,
+              role: "assistant",
+              parts: [{ type: "text", text }],
+            },
+          ];
+
+          await saveChatHistory(
+            sessionKey,
+            updatedMessages,
+          );
+        } catch (error) {
+          console.warn("[Redis] Could not persist completed chat.", error);
+        }
+      },
     });
 
     return result.toUIMessageStreamResponse();

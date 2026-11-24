@@ -2,12 +2,12 @@ import Link from "next/link";
 import { getPersonaById } from "@/lib/persona-store";
 import ChatClient from "./ChatClient";
 
-export default function ChatPage({
+export default async function ChatPage({
   params,
 }: {
   params: { personaId: string };
 }) {
-  const persona = getPersonaById(params.personaId);
+  const persona = await getPersonaById(params.personaId);
 
   if (!persona) {
     return (

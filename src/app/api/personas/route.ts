@@ -97,7 +97,7 @@ Do not claim that you searched a database or received passages.`;
     isCustom: true,
   };
 
-  saveCustomPersona(persona);
+  await saveCustomPersona(persona);
 
   if (typeof knowledgeText === "string" && knowledgeText.trim()) {
     try {
