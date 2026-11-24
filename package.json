@@ -12,6 +12,7 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.124",
     "@ai-sdk/react": "^4.0.184",
+    "@clerk/nextjs": "^6.39.9",
     "@pinecone-database/pinecone": "^9.2.0",
     "ai": "^7.0.179",
     "next": "14.2.35",

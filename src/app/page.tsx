@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { personas } from "@/data/personas";
+import { getAllPersonas } from "@/lib/persona-store";
 
 export default function Home() {
+  const personas = getAllPersonas();
+
   return (
     <main className="min-h-screen px-5 py-12 sm:px-8 lg:px-12">
       <div className="mx-auto max-w-6xl">

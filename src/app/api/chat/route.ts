@@ -1,4 +1,4 @@
-import { getPersonaById } from "@/data/personas";
+import { getPersonaById } from "@/lib/persona-store";
 import { retrieveContext } from "@/lib/rag";
 import { google } from "@ai-sdk/google";
 import { convertToModelMessages, streamText } from "ai";
@@ -98,16 +98,16 @@ export async function POST(request: Request) {
     const modelMessages = await convertToModelMessages(messages);
     let systemPrompt = persona.systemPrompt;
 
-    if (personaId === "marcus") {
+    if (personaId === "marcus" || persona.isCustom) {
       const latestUserMessage = getLatestUserMessageText(messages);
       const passages = await retrieveContext(
-        "marcus",
+        personaId,
         latestUserMessage,
         3,
       );
 
       console.log(
-        "[Marcus RAG] Retrieved passages:",
+        `[RAG:${personaId}] Retrieved passages:`,
         passages.map((passage) => ({
           source: passage.source,
           score: passage.score,
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
 
         systemPrompt = `${persona.systemPrompt}
 
-Ground your response in the following passages from Meditations where relevant.
+Ground your response in the following retrieved source passages where relevant.
 Use their ideas naturally and reflectively; do not quote mechanically or mention
 retrieval, a knowledge base, or that passages were provided.
 

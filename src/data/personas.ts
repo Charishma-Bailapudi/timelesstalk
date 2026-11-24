@@ -1,4 +1,4 @@
-export type PersonaId = "marcus" | "arjuna" | "bhishma";
+export type PersonaId = "marcus" | "arjuna" | "bhishma" | (string & {});
 
 export interface Persona {
   id: PersonaId;
@@ -6,6 +6,8 @@ export interface Persona {
   title: string;
   tagline: string;
   systemPrompt: string;
+  createdBy?: string;
+  isCustom?: true;
 }
 
 export const personas: Persona[] = [
