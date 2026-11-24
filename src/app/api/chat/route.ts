@@ -103,33 +103,27 @@ export async function POST(request: Request) {
   try {
     const modelMessages = await convertToModelMessages(messages);
     let systemPrompt = persona.systemPrompt;
+    const latestUserMessage = getLatestUserMessageText(messages);
+    const passages = await retrieveContext(personaId, latestUserMessage, 3);
 
-    if (personaId === "marcus" || persona.isCustom) {
-      const latestUserMessage = getLatestUserMessageText(messages);
-      const passages = await retrieveContext(
-        personaId,
-        latestUserMessage,
-        3,
-      );
+    console.log(
+      `[RAG:${personaId}] Retrieved passages:`,
+      passages.map((passage) => ({
+        source: passage.source,
+        score: passage.score,
+        text: passage.text,
+      })),
+    );
 
-      console.log(
-        `[RAG:${personaId}] Retrieved passages:`,
-        passages.map((passage) => ({
-          source: passage.source,
-          score: passage.score,
-          text: passage.text,
-        })),
-      );
+    if (passages.length > 0) {
+      const context = passages
+        .map(
+          (passage, index) =>
+            `${index + 1}. (${passage.source}) ${passage.text}`,
+        )
+        .join("\n");
 
-      if (passages.length > 0) {
-        const context = passages
-          .map(
-            (passage, index) =>
-              `${index + 1}. (${passage.source}) ${passage.text}`,
-          )
-          .join("\n");
-
-        systemPrompt = `${persona.systemPrompt}
+      systemPrompt = `${persona.systemPrompt}
 
 Ground your response in the following retrieved source passages where relevant.
 Use their ideas naturally and reflectively; do not quote mechanically or mention
@@ -137,7 +131,6 @@ retrieval, a knowledge base, or that passages were provided.
 
 Retrieved passages:
 ${context}`;
-      }
     }
 
     const result = streamText({

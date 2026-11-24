@@ -7,10 +7,13 @@ import {
   UserButton,
   useUser,
 } from "@clerk/nextjs";
-import { Persona } from "@/data/personas";
+import {
+  getPersonaAvatarClasses,
+  Persona,
+} from "@/data/personas";
 import { stopSpeaking } from "@/lib/voice";
 import Link from "next/link";
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import ChatClient from "./chat/[personaId]/ChatClient";
 
 interface UnifiedChatWorkspaceProps {
@@ -36,6 +39,15 @@ export default function UnifiedChatWorkspace({
   const activePersona =
     personas.find((persona) => persona.id === activePersonaId) ??
     personas.find((persona) => persona.id === "marcus");
+
+  function addSummonedPersona(persona: Persona) {
+    setPersonas((current) =>
+      current.some((existing) => existing.id === persona.id)
+        ? current
+        : [...current, persona],
+    );
+    selectPersona(persona.id);
+  }
 
   function selectPersona(personaId: string) {
     stopSpeaking();
@@ -92,6 +104,7 @@ export default function UnifiedChatWorkspace({
         deleteError={deleteError}
         onSelect={selectPersona}
         onDelete={deletePersona}
+        onSummoned={addSummonedPersona}
         className="hidden h-full w-[260px] shrink-0 border-r border-white/10 md:flex"
       />
 
@@ -110,6 +123,7 @@ export default function UnifiedChatWorkspace({
             deleteError={deleteError}
             onSelect={selectPersona}
             onDelete={deletePersona}
+            onSummoned={addSummonedPersona}
             className="relative flex h-full w-[min(82vw,300px)] border-r border-white/10 shadow-2xl"
           />
         </div>
@@ -135,6 +149,7 @@ function SidebarContent({
   deleteError,
   onSelect,
   onDelete,
+  onSummoned,
   className,
 }: {
   personas: Persona[];
@@ -143,20 +158,87 @@ function SidebarContent({
   deleteError: string;
   onSelect: (personaId: string) => void;
   onDelete: (personaId: string) => void;
+  onSummoned: (persona: Persona) => void;
   className: string;
 }) {
   const { user, isLoaded } = useUser();
+  const [summonName, setSummonName] = useState("");
+  const [isSummoning, setIsSummoning] = useState(false);
+  const [summonError, setSummonError] = useState("");
+
+  async function handleSummon(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = summonName.trim();
+    if (!name || isSummoning) {
+      return;
+    }
+
+    setSummonError("");
+    setIsSummoning(true);
+    try {
+      const response = await fetch("/api/personas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const result = (await response.json()) as {
+        persona?: Persona;
+        error?: string;
+      };
+
+      if (!response.ok || !result.persona) {
+        throw new Error(result.error || "Could not summon this persona.");
+      }
+
+      setSummonName("");
+      onSummoned(result.persona);
+    } catch (error) {
+      setSummonError(
+        error instanceof Error ? error.message : "Could not summon this persona.",
+      );
+    } finally {
+      setIsSummoning(false);
+    }
+  }
 
   return (
     <aside className={`flex-col bg-[#171715] px-3 py-4 ${className}`}>
       <Link href="/" className="mb-5 px-2 text-lg font-semibold text-stone-100">
         TimelessTalk
       </Link>
+      <form onSubmit={handleSummon} className="mb-2 flex gap-1.5">
+        <input
+          value={summonName}
+          onChange={(event) => setSummonName(event.target.value)}
+          disabled={isSummoning}
+          aria-label="Persona to summon"
+          placeholder="Summon anyone (e.g. Iron Man)..."
+          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2.5 py-2 text-xs text-stone-100 outline-none placeholder:text-stone-600 focus:border-amber-300/50 disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          aria-label="Summon persona"
+          disabled={!summonName.trim() || isSummoning}
+          className="rounded-lg bg-amber-300 px-2.5 text-xs font-semibold text-stone-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSummoning ? "..." : "Go"}
+        </button>
+      </form>
+      {isSummoning && (
+        <p role="status" className="mb-2 px-1 text-[11px] text-amber-200/80">
+          Summoning &amp; indexing...
+        </p>
+      )}
+      {summonError && (
+        <p role="alert" className="mb-2 px-1 text-[11px] text-red-300">
+          {summonError}
+        </p>
+      )}
       <Link
         href="/create"
-        className="mb-6 flex h-11 items-center justify-center rounded-xl bg-amber-300 text-sm font-semibold text-stone-950 transition hover:bg-amber-200"
+        className="mb-5 flex min-h-9 items-center rounded-lg px-2 text-xs font-medium text-stone-400 transition hover:bg-white/[0.05] hover:text-amber-200"
       >
-        + Create Persona
+        + Custom Persona (with notes)
       </Link>
 
       <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
@@ -241,18 +323,9 @@ function SidebarContent({
 }
 
 function PersonaAvatar({ persona }: { persona: Persona }) {
-  const accent =
-    persona.id === "marcus"
-      ? "border-amber-300/30 bg-amber-300/10 text-amber-200"
-      : persona.id === "arjuna"
-        ? "border-sky-300/30 bg-sky-300/10 text-sky-200"
-        : persona.id === "bhishma"
-          ? "border-violet-300/30 bg-violet-300/10 text-violet-200"
-          : "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
-
   return (
     <span
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${accent}`}
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${getPersonaAvatarClasses(persona)}`}
     >
       {persona.name.charAt(0)}
     </span>

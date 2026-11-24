@@ -4,6 +4,13 @@ const VOICE_IDS: Record<string, string> = {
   marcus: "JBFqnCBsd6RMkjVDRZzb",
   arjuna: "IKne3meq5aSn9XLyUdCD",
   bhishma: "pqHfZKP75CvOlQylNhV4",
+  chanakya: "pNInz6obpgDQGcFmaJgB",
+  vivekananda: "ErXwobaYiN019PkySvjV",
+  kalam: "TxGEqnHWrfWFTfGW9XjX",
+  socrates: "VR6AewLTigWG4xSOukaG",
+  tesla: "N2lVS1w4EtoT3dr4eOWO",
+  cleopatra: "EXAVITQu4vr4xnSDxMaL",
+  davinci: "XrExE9yKIg1WjnnlVkGX",
 };
 const DEFAULT_VOICE_ID = "nPczCjzI2devNBz1zQrb";
 

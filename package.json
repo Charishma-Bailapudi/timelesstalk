@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed:marcus": "tsx scripts/seed-marcus.ts"
+    "seed:all": "tsx scripts/seed-all.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.124",

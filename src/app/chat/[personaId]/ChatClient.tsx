@@ -10,7 +10,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { Persona } from "@/data/personas";
+import {
+  getPersonaAvatarClasses,
+  Persona,
+} from "@/data/personas";
 import { ChatMessage } from "@/lib/redis";
 import { speakText, stopSpeaking } from "@/lib/voice";
 
@@ -129,14 +132,7 @@ export default function ChatClient({
   }
 
   const isLoading = status === "submitted" || status === "streaming";
-  const accent =
-    personaId === "marcus"
-      ? "border-amber-300/30 bg-amber-300/10 text-amber-200"
-      : personaId === "arjuna"
-        ? "border-sky-300/30 bg-sky-300/10 text-sky-200"
-        : personaId === "bhishma"
-          ? "border-violet-300/30 bg-violet-300/10 text-violet-200"
-          : "border-emerald-300/30 bg-emerald-300/10 text-emerald-200";
+  const accent = getPersonaAvatarClasses(persona);
 
   async function clearChat() {
     try {

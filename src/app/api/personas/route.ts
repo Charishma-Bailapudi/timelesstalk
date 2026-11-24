@@ -46,11 +46,10 @@ export async function POST(request: Request) {
   if (
     typeof name !== "string" ||
     !name.trim() ||
-    typeof description !== "string" ||
-    !description.trim()
+    (description !== undefined && typeof description !== "string")
   ) {
     return NextResponse.json(
-      { error: "Name and description are required." },
+      { error: "A valid name and optional description are required." },
       { status: 400 },
     );
   }
@@ -63,11 +62,19 @@ export async function POST(request: Request) {
     .slice(0, 40);
   const id = `${slug || "persona"}-${randomUUID().slice(0, 8)}`;
 
-  const generated = await generatePersonaDetails(name.trim(), description.trim());
+  const personaDescription =
+    typeof description === "string" && description.trim()
+      ? description.trim()
+      : undefined;
+  const generated = await generatePersonaDetails(
+    name.trim(),
+    personaDescription,
+  );
 
   const persona: Persona = {
     id,
     name: name.trim(),
+    description: generated.description,
     title: generated.title,
     tagline: generated.tagline,
     systemPrompt: generated.systemPrompt,
@@ -77,13 +84,21 @@ export async function POST(request: Request) {
 
   await saveCustomPersona(persona);
 
-  if (typeof knowledgeText === "string" && knowledgeText.trim()) {
+  const knowledge =
+    typeof knowledgeText === "string" && knowledgeText.trim()
+      ? {
+          text: knowledgeText.trim(),
+          source: `${name.trim()} knowledge base`,
+        }
+      : await fetchWikipediaKnowledge(name.trim());
+
+  if (knowledge) {
     try {
       if (!process.env.PINECONE_API_KEY) {
         throw new Error("PINECONE_API_KEY is missing.");
       }
 
-      const chunks = chunkKnowledgeText(knowledgeText);
+      const chunks = chunkKnowledgeText(knowledge.text);
       if (chunks.length > 0) {
         const { embeddings } = await embedMany({
           model: google.embedding("gemini-embedding-001"),
@@ -91,7 +106,10 @@ export async function POST(request: Request) {
           dimensions: 768,
         });
 
-        if (embeddings.some((embedding) => embedding.length !== 768)) {
+        if (
+          embeddings.length !== chunks.length ||
+          embeddings.some((embedding) => embedding.length !== 768)
+        ) {
           throw new Error(
             "The Gemini embedding model did not return 768 dimensions.",
           );
@@ -110,7 +128,7 @@ export async function POST(request: Request) {
             values: embeddings[index],
             metadata: {
               text,
-              source: `${name.trim()} knowledge base`,
+              source: knowledge.source,
             },
           })),
         });
@@ -128,6 +146,10 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
+  } else {
+    console.info(
+      `[Persona Ingestion] No Wikipedia extract found for "${name.trim()}"; saved without knowledge vectors.`,
+    );
   }
 
   return NextResponse.json({ persona }, { status: 201 });
@@ -175,40 +197,141 @@ export async function DELETE(request: Request) {
   }
 }
 
+async function fetchWikipediaKnowledge(
+  name: string,
+): Promise<{ text: string; source: string } | null> {
+  try {
+    const searchUrl = new URL("https://en.wikipedia.org/w/api.php");
+    searchUrl.search = new URLSearchParams({
+      action: "query",
+      list: "search",
+      srsearch: name,
+      srlimit: "1",
+      format: "json",
+    }).toString();
+
+    const headers = {
+      "User-Agent": "TimelessTalk/1.0",
+      Accept: "application/json",
+    };
+    const searchResponse = await fetch(searchUrl, { headers });
+    if (!searchResponse.ok) {
+      console.warn(
+        `[Persona Ingestion] Wikipedia search returned HTTP ${searchResponse.status} for "${name}".`,
+      );
+      return null;
+    }
+
+    const searchResult = (await searchResponse.json()) as {
+      query?: { search?: Array<{ title?: unknown }> };
+    };
+    const resolvedTitle = searchResult.query?.search?.[0]?.title;
+    if (typeof resolvedTitle !== "string" || !resolvedTitle.trim()) {
+      return null;
+    }
+
+    const extractUrl = new URL("https://en.wikipedia.org/w/api.php");
+    extractUrl.search = new URLSearchParams({
+      action: "query",
+      prop: "extracts",
+      explaintext: "true",
+      exchars: "4000",
+      redirects: "1",
+      format: "json",
+      titles: resolvedTitle,
+    }).toString();
+
+    const extractResponse = await fetch(extractUrl, { headers });
+    if (!extractResponse.ok) {
+      console.warn(
+        `[Persona Ingestion] Wikipedia extract returned HTTP ${extractResponse.status} for "${resolvedTitle}".`,
+      );
+      return null;
+    }
+
+    const result = (await extractResponse.json()) as {
+      query?: {
+        pages?: Record<
+          string,
+          { title?: unknown; extract?: unknown; missing?: unknown }
+        >;
+      };
+    };
+    const article = Object.values(result.query?.pages ?? {}).find(
+      (page) =>
+        page.missing === undefined &&
+        typeof page.title === "string" &&
+        typeof page.extract === "string" &&
+        page.extract.trim().length > 200,
+    );
+
+    if (!article || typeof article.title !== "string" || typeof article.extract !== "string") {
+      return null;
+    }
+
+    return {
+      text: article.extract.trim(),
+      source: `Wikipedia: ${article.title}`,
+    };
+  } catch (error) {
+    console.warn(
+      `[Persona Ingestion] Could not search Wikipedia for "${name}".`,
+      error,
+    );
+    return null;
+  }
+}
+
 async function generatePersonaDetails(
   name: string,
-  description: string,
-): Promise<{ title: string; tagline: string; systemPrompt: string }> {
+  description?: string,
+): Promise<{
+  description: string;
+  title: string;
+  tagline: string;
+  systemPrompt: string;
+}> {
+  const fallbackDescription =
+    description ??
+    `A thoughtful conversational persona inspired by ${name}. Use retrieved, verifiable knowledge to answer specific questions.`;
   const fallback = {
-    title: description.split(/[.!?]/, 1)[0].trim().slice(0, 100) || name,
-    tagline: description,
-    systemPrompt: `You are ${name}. ${description}
+    description: fallbackDescription,
+    title: name,
+    tagline: description || `Explore ideas in conversation with ${name}.`,
+    systemPrompt: `You are ${name}. ${fallbackDescription}
 
-Stay consistent with this identity and description. Respond naturally and
-thoughtfully, and use relevant retrieved knowledge passages when available.
-Do not mention retrieval or claim access to information that was not provided.`,
+Respond thoughtfully and do not invent specific biographical claims. Use relevant
+retrieved knowledge passages when available, and acknowledge uncertainty.`,
   };
 
   try {
     const { text } = await generateText({
       model: google("gemini-2.5-flash"),
-      prompt: `Create persona instructions based on this information.
-Return only a JSON object with string fields "title", "tagline", and "systemPrompt".
+      prompt: `Create a grounded AI persona profile from the information below.
+${
+  description
+    ? "Use the supplied description as the basis for the profile."
+    : "Use reliable public knowledge about the named person or character; do not invent unsupported biographical claims, and acknowledge uncertainty."
+}
+Return only a JSON object with string fields "description", "title", "tagline", and "systemPrompt".
 
 Name: ${name}
-Description: ${description}`,
+${description ? `Description: ${description}` : ""}`,
     });
 
     const parsed = JSON.parse(text) as {
+      description?: unknown;
       title?: unknown;
       tagline?: unknown;
       systemPrompt?: unknown;
     };
 
     if (
+      typeof parsed.description !== "string" ||
       typeof parsed.title !== "string" ||
       typeof parsed.tagline !== "string" ||
       typeof parsed.systemPrompt !== "string" ||
+      !parsed.description.trim() ||
       !parsed.title.trim() ||
       !parsed.tagline.trim() ||
       !parsed.systemPrompt.trim()
@@ -217,6 +340,7 @@ Description: ${description}`,
     }
 
     return {
+      description: parsed.description.trim(),
       title: parsed.title.trim(),
       tagline: parsed.tagline.trim(),
       systemPrompt: parsed.systemPrompt.trim(),
