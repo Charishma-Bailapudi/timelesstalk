@@ -6,11 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:marcus": "tsx scripts/seed-marcus.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.124",
     "@ai-sdk/react": "^4.0.184",
+    "@pinecone-database/pinecone": "^9.2.0",
     "ai": "^7.0.179",
     "next": "14.2.35",
     "react": "^18",
@@ -20,10 +22,12 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "dotenv": "^18.0.10",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
