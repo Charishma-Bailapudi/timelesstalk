@@ -47,6 +47,35 @@ export async function saveCustomPersona(persona: Persona): Promise<void> {
   }
 }
 
+export async function deleteCustomPersona(
+  id: string,
+  userId: string,
+): Promise<"deleted" | "not-found" | "forbidden"> {
+  const redis = getRedis();
+  if (!redis) {
+    throw new Error("Upstash Redis is not configured.");
+  }
+
+  const parsed = await redis.get<unknown>(CUSTOM_PERSONAS_KEY);
+  const customPersonas = Array.isArray(parsed)
+    ? parsed.filter(isCustomPersona)
+    : [];
+  const persona = customPersonas.find((entry) => entry.id === id);
+
+  if (!persona) {
+    return "not-found";
+  }
+  if (persona.createdBy !== userId) {
+    return "forbidden";
+  }
+
+  await redis.set(
+    CUSTOM_PERSONAS_KEY,
+    customPersonas.filter((entry) => entry.id !== id),
+  );
+  return "deleted";
+}
+
 async function readCustomPersonas(): Promise<Persona[]> {
   const redis = getRedis();
   if (!redis) {

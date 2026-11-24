@@ -4,7 +4,10 @@ import { Pinecone } from "@pinecone-database/pinecone";
 import { embedMany, generateText } from "ai";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { saveCustomPersona } from "@/lib/persona-store";
+import {
+  deleteCustomPersona,
+  saveCustomPersona,
+} from "@/lib/persona-store";
 import { Persona } from "@/data/personas";
 
 export async function POST(request: Request) {
@@ -128,6 +131,48 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ persona }, { status: 201 });
+}
+
+export async function DELETE(request: Request) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json(
+      { error: "You must be signed in to delete a persona." },
+      { status: 401 },
+    );
+  }
+
+  const personaId = new URL(request.url).searchParams.get("id");
+  if (!personaId) {
+    return NextResponse.json(
+      { error: "A persona id is required." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const result = await deleteCustomPersona(personaId, userId);
+    if (result === "not-found") {
+      return NextResponse.json(
+        { error: "Custom persona not found." },
+        { status: 404 },
+      );
+    }
+    if (result === "forbidden") {
+      return NextResponse.json(
+        { error: "You can only delete personas you created." },
+        { status: 403 },
+      );
+    }
+
+    return NextResponse.json({ deleted: true });
+  } catch (error) {
+    console.error("[Persona Deletion] Could not delete persona.", error);
+    return NextResponse.json(
+      { error: "The persona could not be deleted." },
+      { status: 500 },
+    );
+  }
 }
 
 async function generatePersonaDetails(

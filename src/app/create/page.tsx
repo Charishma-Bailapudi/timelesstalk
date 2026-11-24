@@ -41,7 +41,7 @@ export default function CreatePersonaPage() {
         throw new Error(result.error || "The persona could not be created.");
       }
 
-      router.push(`/chat/${result.persona.id}`);
+      router.push(`/?persona=${encodeURIComponent(result.persona.id)}`);
     } catch (submissionError) {
       setError(
         submissionError instanceof Error

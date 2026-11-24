@@ -1,6 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getPersonaById } from "@/lib/persona-store";
-import ChatClient from "./ChatClient";
 
 export default async function ChatPage({
   params,
@@ -30,5 +30,5 @@ export default async function ChatPage({
     );
   }
 
-  return <ChatClient persona={persona} personaId={params.personaId} />;
+  redirect(`/?persona=${encodeURIComponent(persona.id)}`);
 }

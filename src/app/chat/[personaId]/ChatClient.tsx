@@ -17,9 +17,13 @@ import { speakText, stopSpeaking } from "@/lib/voice";
 export default function ChatClient({
   persona,
   personaId,
+  workspace = false,
+  onMenuClick,
 }: {
   persona: Persona;
   personaId: string;
+  workspace?: boolean;
+  onMenuClick?: () => void;
 }) {
   const [input, setInput] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -149,43 +153,85 @@ export default function ChatClient({
   }
 
   return (
-    <main className="flex h-[calc(100vh-65px)] min-h-0 flex-col overflow-hidden">
+    <main
+      className={`flex min-h-0 flex-col overflow-hidden ${
+        workspace ? "h-full" : "h-[calc(100vh-65px)]"
+      }`}
+    >
       <header className="border-b border-white/10 px-4 py-3 sm:px-8 sm:py-4">
-        <div className="mx-auto flex max-w-4xl items-center gap-3">
-          <Link
-            href="/"
-            className="text-sm font-medium text-stone-400 transition hover:text-amber-200"
-          >
-            ← Back
-          </Link>
+        <div
+          className={`mx-auto flex max-w-4xl items-center gap-3 ${
+            onMenuClick ? "flex-wrap" : ""
+          }`}
+        >
+          {onMenuClick && (
+            <button
+              type="button"
+              aria-label="Open persona menu"
+              onClick={onMenuClick}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 text-stone-300 hover:bg-white/[0.06] md:hidden"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                fill="none"
+                className="h-5 w-5"
+              >
+                <path
+                  d="M3 5h14M3 10h14M3 15h14"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          )}
+          {!workspace && (
+            <Link
+              href="/"
+              className="text-sm font-medium text-stone-400 transition hover:text-amber-200"
+            >
+              ← Back
+            </Link>
+          )}
           <div
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${accent}`}
           >
             {persona.name.charAt(0)}
           </div>
           <div className="ml-1 min-w-0 flex-1">
-            <h1 className="text-lg font-semibold text-stone-100">{persona.name}</h1>
-            <p className="text-xs text-amber-200/70">{persona.title}</p>
+            <h1 className="truncate text-lg font-semibold text-stone-100">
+              {persona.name}
+            </h1>
+            <p className="truncate whitespace-nowrap text-xs text-amber-200/70">
+              {persona.title}
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={clearChat}
-            className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-stone-400 transition hover:border-red-300/30 hover:text-red-300 sm:px-4"
-          >
-            Clear Chat
-          </button>
-          <button
-            type="button"
-            aria-pressed={autoSpeak}
-            onClick={() => setAutoSpeak((enabled) => !enabled)}
-            className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition sm:px-4 ${
-              autoSpeak
-                ? "border-amber-300/40 text-amber-200"
-                : "border-white/10 text-stone-500 hover:text-stone-300"
+          <div
+            className={`flex shrink-0 items-center gap-2 ${
+              onMenuClick ? "ml-auto w-full justify-end md:ml-0 md:w-auto" : ""
             }`}
           >
-            Auto-Speak {autoSpeak ? "On" : "Off"}
-          </button>
+            <button
+              type="button"
+              onClick={clearChat}
+              className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-stone-400 transition hover:border-red-300/30 hover:text-red-300 sm:px-4"
+            >
+              Clear Chat
+            </button>
+            <button
+              type="button"
+              aria-pressed={autoSpeak}
+              onClick={() => setAutoSpeak((enabled) => !enabled)}
+              className={`rounded-full border px-3 py-2 text-xs font-semibold transition sm:px-4 ${
+                autoSpeak
+                  ? "border-amber-300/40 text-amber-200"
+                  : "border-white/10 text-stone-500 hover:text-stone-300"
+              }`}
+            >
+              Auto-Speak {autoSpeak ? "On" : "Off"}
+            </button>
+          </div>
         </div>
       </header>
 
